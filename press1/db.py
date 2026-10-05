@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from contextlib import contextmanager
 
 from . import config
@@ -19,17 +20,47 @@ CREATE TABLE IF NOT EXISTS calls (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS calls_status ON calls (status);
 """
+
+# Statuses that still occupy a Plivo channel / 3CX trunk line.
+ACTIVE = ("queued", "answered", "transferred", "voicemail")
+
+_initialized = set()
+_init_lock = threading.Lock()
+
+
+def _init(path):
+    # Schema + WAL once per process: running DDL on every request takes a write
+    # lock and serializes all concurrent webhooks.
+    with _init_lock:
+        if path in _initialized:
+            return
+        conn = sqlite3.connect(path, timeout=30)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.executescript(SCHEMA)
+        finally:
+            conn.close()
+        _initialized.add(path)
 
 
 @contextmanager
 def connect(path=None):
-    conn = sqlite3.connect(path or config.DB_PATH)
+    path = path or config.DB_PATH
+    _init(path)
+    # busy_timeout: concurrent writers wait instead of failing with "database is locked"
+    # (which turned into HTTP 500 -> Plivo got no XML -> dead air for the caller).
+    conn = sqlite3.connect(path, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     try:
-        conn.executescript(SCHEMA)
         yield conn
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -39,12 +70,15 @@ def is_dnc(conn, phone):
 
 
 def add_dnc(conn, phone, source):
-    conn.execute("INSERT OR IGNORE INTO dnc (phone, source) VALUES (?, ?)", (phone, source))
+    if phone:
+        conn.execute("INSERT OR IGNORE INTO dnc (phone, source) VALUES (?, ?)", (phone, source))
 
 
 def log_call(conn, call_uuid, phone, campaign, status):
+    # The answer webhook may already have created the row under this uuid (fast pickup).
     conn.execute(
-        "INSERT OR REPLACE INTO calls (call_uuid, phone, campaign, status) VALUES (?, ?, ?, ?)",
+        "INSERT INTO calls (call_uuid, phone, campaign, status) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(call_uuid) DO UPDATE SET campaign = excluded.campaign",
         (call_uuid, phone, campaign, status),
     )
 
@@ -64,7 +98,37 @@ def phone_for_call(conn, call_uuid):
     return row["phone"] if row else None
 
 
-def bind_call_uuid(conn, request_uuid, call_uuid):
-    """Calls are logged by Plivo request_uuid; webhooks then carry the real CallUUID."""
-    if request_uuid and call_uuid and request_uuid != call_uuid:
-        conn.execute("UPDATE calls SET call_uuid = ? WHERE call_uuid = ?", (call_uuid, request_uuid))
+def bind_call_uuid(conn, request_uuid, call_uuid, phone=""):
+    """Calls are logged by Plivo request_uuid; webhooks carry the real CallUUID.
+
+    Idempotent and race-safe: works whether the dialer has logged the call yet or not,
+    and whether Plivo retries the webhook.
+    """
+    if not call_uuid:
+        return
+    if request_uuid and request_uuid != call_uuid:
+        conn.execute(
+            "UPDATE OR IGNORE calls SET call_uuid = ? WHERE call_uuid = ?", (call_uuid, request_uuid)
+        )
+    conn.execute(
+        "INSERT OR IGNORE INTO calls (call_uuid, phone, campaign, status) VALUES (?, ?, '', 'queued')",
+        (call_uuid, phone),
+    )
+
+
+def active_calls(conn):
+    q = f"SELECT COUNT(*) FROM calls WHERE status IN ({','.join('?' * len(ACTIVE))})"
+    return conn.execute(q, ACTIVE).fetchone()[0]
+
+
+def transferred_calls(conn):
+    return conn.execute("SELECT COUNT(*) FROM calls WHERE status = 'transferred'").fetchone()[0]
+
+
+def expire_stale(conn, minutes):
+    """Free slots whose hangup webhook was lost, so the dialer never stalls forever."""
+    q = (
+        f"UPDATE calls SET status = 'stale' WHERE status IN ({','.join('?' * len(ACTIVE))}) "
+        f"AND updated_at < datetime('now', ?)"
+    )
+    return conn.execute(q, (*ACTIVE, f"-{int(minutes)} minutes")).rowcount

@@ -2,3 +2,5 @@ plivo>=4.50
 flask>=3.0
 python-dotenv>=1.0
 pytest>=8.0
+gunicorn>=22
+requests

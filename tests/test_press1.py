@@ -81,3 +81,55 @@ def test_signature_required(tmp_path, monkeypatch):
         assert app.test_client().post("/ivr/answer").status_code == 403
     finally:
         app.config["TESTING"] = True
+
+
+def test_agent_slots_capped(client, monkeypatch):
+    monkeypatch.setattr(config, "MAX_AGENT_CHANNELS", 2)
+    results = []
+    for i in range(4):
+        client.post("/ivr/answer", data={"CallUUID": f"c{i}", "To": "+12125550100"})
+        r = client.post("/ivr/input", data={"CallUUID": f"c{i}", "Digits": "1"})
+        results.append(b"sip:800@pbx.test" in r.data)
+    assert results == [True, True, False, False]
+    client.post("/ivr/hangup", data={"CallUUID": "c0"})  # agent line freed
+    client.post("/ivr/answer", data={"CallUUID": "c9", "To": "+12125550100"})
+    assert b"sip:800" in client.post("/ivr/input", data={"CallUUID": "c9", "Digits": "1"}).data
+
+
+def test_cid_binding_no_duplicates(client):
+    with db.connect() as conn:
+        db.log_call(conn, "cid-1", "+12125550111", "c", "queued")
+    client.post("/ivr/answer?cid=cid-1", data={"CallUUID": "call-x", "To": "+12125550111"})
+    client.post("/ivr/hangup?cid=cid-1", data={"CallUUID": "call-x", "HangupCause": "NORMAL"})
+    with db.connect() as conn:
+        rows = conn.execute("SELECT call_uuid, status FROM calls WHERE phone = '+12125550111'").fetchall()
+    assert [tuple(r) for r in rows] == [("call-x", "ended:NORMAL")]
+
+
+def test_dialer_respects_concurrency(tmp_path, monkeypatch):
+    from press1 import dialer
+    monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "d.db"))
+    monkeypatch.setattr(config, "MAX_CONCURRENT_CALLS", 3)
+    monkeypatch.setattr(config, "CALLS_PER_SECOND", 1000)
+    csv_path = tmp_path / "c.csv"
+    lines = ["phone,first_name,timezone,state,consent_date,consent_source"]
+    lines += [f"+1212555{1000 + i},A,UTC,NY,2026-01-01,f#{i}" for i in range(10)]
+    csv_path.write_text("\n".join(lines))
+    monkeypatch.setattr("press1.compliance.DEFAULT_HOURS", (0, 24))
+    peak = []
+
+    def fake_place(contact, cid):
+        with db.connect() as conn:
+            peak.append(db.active_calls(conn))
+        return "r"
+
+    def fake_sleep(_):
+        # simulate one call finishing whenever the dialer waits for a slot
+        with db.connect() as conn:
+            conn.execute("UPDATE calls SET status='ended' WHERE rowid = "
+                         "(SELECT MIN(rowid) FROM calls WHERE status='queued')")
+
+    monkeypatch.setattr(dialer, "place_call", fake_place)
+    stats = dialer.run(str(csv_path), "t", sleep=fake_sleep)
+    assert stats == {"called": 10}
+    assert max(peak) <= 3
