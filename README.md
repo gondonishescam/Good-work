@@ -30,11 +30,11 @@ An outbound sales call to customers who gave **prior express written consent**.
 ## Telegram control (from your phone)
 1. Create a bot with @BotFather to get a token. Get your id from @userinfobot.
 2. On a server: put `TELEGRAM_BOT_TOKEN` and `TELEGRAM_OWNER_ID` in `.env`, then run `docker compose up -d --build`. HTTPS for `PUBLIC_URL` points to port 8000.
-3. In the bot:
-   - `/set PLIVO_AUTH_ID ...`, `/set PLIVO_AUTH_TOKEN ...`, `/set CALLER_ID ...`, `/set PUBLIC_URL ...`, `/set THREECX_SIP_URI ...`
-   - `/check`
-   - `/set TEST_NUMBERS +1...`, then `/test +1...`
-   - send the CSV, then `/run name`, `/status`, `/stop`
+3. In the bot: `/start` opens the menu (Russian UI); everything is set with buttons:
+   - **📡 Plivo**: Auth ID, Auth Token, Webhook URL; **📋 Мои номера** picks the Caller ID from your Plivo account; **🔌 Проверить** checks keys, balance, Caller ID ownership and `/health`
+   - **☎️ 3CX**: **🧙 Мастер настройки** asks the PBX address and queue number and builds the SIP URI; **🔌 Проверить** resolves the host and probes SIP ports
+   - **⚡️ Нагрузка**, **🏢 Компания** (incl. test numbers), **🧪 Тестовый звонок**, **🚀 Кампания** (send the CSV for a dry-run report, then start/stop/status)
+   - Values are validated (phone/URL/SIP formats, number ranges) before saving. `/set NAME value` and the other commands still work.
 - Only `TELEGRAM_OWNER_ID` is answered. Messages with keys are deleted right after saving.
 - The keys still pass through Telegram servers. After testing, rotate the Plivo token, or set secrets only via `.env`.
 
