@@ -5,11 +5,15 @@ from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, Response, abort, request
 from plivo.utils import validate_v3_signature
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import config, db, ivr
+from . import config, db, ivr, panel
 
 app = Flask(__name__)
 app.config["TESTING"] = os.getenv("PRESS1_TESTING") == "1"  # load tests only
+if os.getenv("TRUST_PROXY") == "1":  # behind Caddy/nginx: real client IP for login throttling
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+panel.init_app(app)
 log = logging.getLogger("press1")
 
 # Outbound Plivo API calls (AMD -> voicemail) must not run inside the webhook:
@@ -37,7 +41,8 @@ def refresh_settings():
 
 @app.before_request
 def verify_plivo_signature():
-    if request.path == "/health" or app.config.get("TESTING"):
+    # Only Plivo's webhooks are signed; the panel has its own login.
+    if not request.path.startswith("/ivr/") or app.config.get("TESTING"):
         return
     sig = request.headers.get("X-Plivo-Signature-V3", "")
     nonce = request.headers.get("X-Plivo-Signature-V3-Nonce", "")

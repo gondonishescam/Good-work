@@ -9,7 +9,7 @@ An outbound sales call to customers who gave **prior express written consent**.
 1. `pip install -r requirements.txt`, then `cp .env.example .env` and fill it in.
 2. **Plivo:** buy a DID for `CALLER_ID` (your own number, no spoofing). Register the number for STIR/SHAKEN / CNAM so calls don't get flagged as "Spam Likely".
 3. **3CX:** add a SIP trunk to Plivo (Plivo Zentrunk / SIP endpoint). Create an inbound rule that routes calls from Plivo to the queue or ring group. Put that queue's SIP URI in `THREECX_SIP_URI`.
-4. Run the webhooks app: `gunicorn -c gunicorn.conf.py press1.app:app` behind HTTPS (nginx) at `PUBLIC_URL`. Don't use `flask run` in production.
+4. Run the webhooks app: `gunicorn -c gunicorn.conf.py press1.app:app` behind HTTPS at `PUBLIC_URL`, plus `python -m press1.runner` for campaigns. Or use `./deploy.sh` (below). Don't use `flask run` in production.
 5. Prepare the contacts CSV (see `contacts.example.csv`). Every row needs `consent_date` and `consent_source`.
 6. Do a dry run (checks only, no calls): `python -m press1.dialer contacts.csv --campaign fall --dry-run`
 7. Launch: `python -m press1.dialer contacts.csv --campaign fall`
@@ -27,9 +27,33 @@ An outbound sales call to customers who gave **prior express written consent**.
 - **DNC lists:** maintain an internal DNC list, and check state DNC lists and state mini-TCPA laws (FL, OK, MD, WA and others limit call frequency and hours).
 - **Abandonment rate:** keep it ≤3% per 30 days if agents don't pick up in time. Size the 3CX queue to match `MAX_CALLS_PER_MINUTE`.
 
+## Deploy to a server (HTTPS on nip.io)
+On a fresh Linux VPS with ports 80 and 443 open:
+```
+git clone <this repo> && cd <repo>
+./deploy.sh
+```
+It installs Docker if needed and works out `https://<server-ip>.nip.io` (e.g. `203-0-113-5.nip.io`). It writes `DOMAIN`, `PUBLIC_URL` and a generated `PANEL_PASSWORD` into `.env`, and starts everything. It prints the panel URL and password at the end. Caddy gets the Let's Encrypt certificate on the first request. If nip.io has hit its certificate rate limit, run `DOMAIN_SUFFIX=sslip.io ./deploy.sh`.
+
+Services (`docker-compose.yml`), all sharing one database on the `data` volume:
+- `caddy`: HTTPS on 80/443, proxies to `web`
+- `web`: web panel + Plivo webhooks (gunicorn)
+- `runner`: the only process that places campaign calls. The panel and the bot only queue a start or stop, so there is never more than one campaign.
+- `bot`: Telegram control (it idles if no token is set)
+
+## Web panel
+Open `https://<DOMAIN>/` and sign in with `PANEL_PASSWORD`. Works on phones (add it to the home screen) and desktop, in light and dark mode.
+- **Home**: live calls, 3CX lines in use, readiness of Plivo/3CX/contacts, full health check, test call
+- **Plivo**: keys, Webhook URL, pick the Caller ID from your account's numbers, connection check
+- **3CX**: setup assistant (PBX address + queue → SIP URI), line limit, connection check
+- **Campaign**: upload CSV (dry-run report), start/stop, progress and results, do-not-call list
+- **Settings**: load limits, company, test numbers, appearance
+
+Security: you need the password to sign in. After 5 wrong attempts per IP (or 50 in total), logins are blocked for 15 minutes. The session cookie is HttpOnly, Secure and SameSite=Strict. Every change needs a custom header that a cross-site page can't send. Secrets are never sent back to the browser in full.
+
 ## Telegram control (from your phone)
 1. Create a bot with @BotFather to get a token. Get your id from @userinfobot.
-2. On a server: put `TELEGRAM_BOT_TOKEN` and `TELEGRAM_OWNER_ID` in `.env`, then run `docker compose up -d --build`. HTTPS for `PUBLIC_URL` points to port 8000.
+2. Put `TELEGRAM_BOT_TOKEN` and `TELEGRAM_OWNER_ID` in `.env` (the `bot` service picks them up).
 3. In the bot: `/start` opens the menu (Russian UI); everything is set with buttons:
    - **📡 Plivo**: Auth ID, Auth Token, Webhook URL; **📋 Мои номера** picks the Caller ID from your Plivo account; **🔌 Проверить** checks keys, balance, Caller ID ownership and `/health`
    - **☎️ 3CX**: **🧙 Мастер настройки** asks the PBX address and queue number and builds the SIP URI; **🔌 Проверить** resolves the host and probes SIP ports

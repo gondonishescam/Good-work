@@ -1,0 +1,7 @@
+.env
+*.db
+*.db-*
+uploads/
+.git/
+__pycache__/
+.pytest_cache/

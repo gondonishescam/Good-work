@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eef1f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#07080d" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Press 1">
+<meta name="robots" content="noindex, nofollow">
+<title>Press 1</title>
+<link rel="icon" href="/panel/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/panel/icon.svg">
+<link rel="stylesheet" href="/panel/style.css">
+<script src="/panel/app.js" defer></script>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
+</div>
+
+<!-- Login -->
+<section id="login" class="login" hidden>
+  <form id="login-form" class="glass login-card" autocomplete="on">
+    <div class="app-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
+    </div>
+    <h1>Press 1</h1>
+    <p class="muted">Dialer control panel</p>
+    <input type="text" name="username" value="owner" autocomplete="username" hidden>
+    <label class="field">
+      <span class="sr">Password</span>
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    </label>
+    <p id="login-error" class="error" role="alert"></p>
+    <button class="btn primary wide" type="submit">Sign in</button>
+    <p id="login-disabled" class="muted small" hidden>The panel is turned off. Set <code>PANEL_PASSWORD</code> (10+ characters) in <code>.env</code> and restart.</p>
+  </form>
+</section>
+
+<!-- App -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div>
+      <p id="subtitle" class="eyebrow"></p>
+      <h1 id="title">Home</h1>
+    </div>
+    <button class="icon-btn glass" data-action="refresh" aria-label="Refresh">
+      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <section class="view" data-view="home"></section>
+    <section class="view" data-view="plivo" hidden></section>
+    <section class="view" data-view="3cx" hidden></section>
+    <section class="view" data-view="campaign" hidden></section>
+    <section class="view" data-view="settings" hidden></section>
+  </main>
+
+  <nav class="tabbar glass" aria-label="Sections">
+    <span class="lens" aria-hidden="true"></span>
+    <button data-tab="home" class="active" aria-label="Home">
+      <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5M5.5 9.5V20h5v-5.5h3V20h5V9.5"/></svg><span>Home</span>
+    </button>
+    <button data-tab="plivo" aria-label="Plivo">
+      <svg viewBox="0 0 24 24"><path d="M5 12.5a7 7 0 0 1 14 0M8.5 12.5a3.5 3.5 0 0 1 7 0M12 12.5V20M2 9a14 14 0 0 1 20 0"/></svg><span>Plivo</span>
+    </button>
+    <button data-tab="3cx" aria-label="3CX">
+      <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 7h8M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5h.01M8.5 18h7"/></svg><span>3CX</span>
+    </button>
+    <button data-tab="campaign" aria-label="Campaign">
+      <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Campaign</span>
+    </button>
+    <button data-tab="settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span>
+    </button>
+  </nav>
+</div>
+
+<!-- Bottom sheet -->
+<div id="sheet-wrap" class="sheet-wrap" hidden>
+  <div class="sheet-dim" data-action="close-sheet"></div>
+  <div id="sheet" class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="grabber" aria-hidden="true"></div>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast glass" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

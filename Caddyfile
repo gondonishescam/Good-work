@@ -1,0 +1,6 @@
+# HTTPS (Let's Encrypt) for the panel and Plivo webhooks. DOMAIN comes from .env,
+# e.g. 203-0-113-5.nip.io — set by deploy.sh.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:8000
+}

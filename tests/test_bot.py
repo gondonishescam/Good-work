@@ -85,11 +85,14 @@ def make_text(user_id, text, await_=None):
 
 
 def test_validators_normalize():
-    assert bot._sip("800@co.3cx.us") == "sip:800@co.3cx.us"
-    assert bot._url("dialer.example.com/") == "https://dialer.example.com"
-    assert bot._phones("(212) 555-0100, 3055550000") == "+12125550100,+13055550000"
-    for fn, bad in [(bot._sip, "800"), (bot._auth_id, "short"), (bot._int(1, 5), "9"), (bot._phone, "12")]:
-        with pytest.raises(ValueError):
+    from press1 import validate as v
+    assert v.sip("800@co.3cx.us") == "sip:800@co.3cx.us"
+    assert v.url("dialer.example.com/") == "https://dialer.example.com"
+    assert v.phones("(212) 555-0100, 3055550000") == "+12125550100,+13055550000"
+    assert v.host("https://co.3cx.us/#/login") == "co.3cx.us"
+    for fn, bad in [(v.sip, "800"), (v.auth_id, "short"), (v.integer(1, 5), "9"), (v.phone, "12"),
+                    (v.campaign_name, "a b"), (v.url, "")]:
+        with pytest.raises(v.Invalid):
             fn(bad)
 
 
@@ -121,3 +124,36 @@ def test_stranger_text_ignored():
     upd, ctx = make_text(7, "x", "PLIVO_AUTH_ID")
     asyncio.run(bot.on_text(upd, ctx))
     upd.message.delete.assert_not_called()
+
+
+def test_runner_single_campaign(tmp_path, monkeypatch):
+    from press1 import runner
+    monkeypatch.setattr(runner, "UPLOAD_DIR", tmp_path)
+    with pytest.raises(FileNotFoundError):
+        runner.request_start("a")
+    runner.contacts_path().write_text("phone\n")
+    runner.request_start("a")
+    with pytest.raises(runner.Busy):
+        runner.request_start("b")
+    with pytest.raises(runner.Busy):
+        runner.save_contacts(b"phone\n")
+    assert runner.request_stop() and runner.get()["status"] == "stopped"
+
+
+def test_runner_runs_and_stops(tmp_path, monkeypatch):
+    from press1 import dialer, runner
+    monkeypatch.setattr(runner, "UPLOAD_DIR", tmp_path)
+    runner.contacts_path().write_text("phone\n")
+    monkeypatch.setattr(dialer, "run", lambda *a, **k: {"called": 3})
+    runner.request_start("c")
+    assert runner.step() and not runner.step()
+    st = runner.get()
+    assert st["status"] == "done" and st["progress"] == {"called": 3} and not st["notified"]
+
+
+def test_runner_recovers_after_crash(tmp_path):
+    from press1 import runner
+    with db.connect() as conn:
+        runner._set(conn, name="x", status="running")
+    runner.recover()
+    assert runner.get()["status"] == "failed"

@@ -25,6 +25,20 @@ CREATE TABLE IF NOT EXISTS settings (
     name TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS campaign_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    name TEXT,
+    status TEXT NOT NULL DEFAULT 'idle',
+    progress TEXT NOT NULL DEFAULT '{}',
+    message TEXT NOT NULL DEFAULT '',
+    notified INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO campaign_state (id) VALUES (1);
+CREATE TABLE IF NOT EXISTS login_failures (
+    ip TEXT NOT NULL,
+    at REAL NOT NULL
+);
 """
 
 # Statuses that still occupy a Plivo channel / 3CX trunk line.
