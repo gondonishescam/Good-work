@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, Response, abort, request
@@ -18,6 +19,20 @@ _background = ThreadPoolExecutor(max_workers=8, thread_name_prefix="plivo-api")
 
 def xml(body):
     return Response(body, mimetype="application/xml")
+
+
+_settings_loaded_at = 0.0
+
+
+@app.before_request
+def refresh_settings():
+    global _settings_loaded_at
+    if time.monotonic() - _settings_loaded_at > 5:
+        try:
+            db.load_settings()
+        except Exception:
+            log.exception("could not load settings")
+        _settings_loaded_at = time.monotonic()
 
 
 @app.before_request

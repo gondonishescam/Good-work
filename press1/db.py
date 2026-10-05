@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS calls (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS calls_status ON calls (status);
+CREATE TABLE IF NOT EXISTS settings (
+    name TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 # Statuses that still occupy a Plivo channel / 3CX trunk line.
@@ -132,3 +136,35 @@ def expire_stale(conn, minutes):
         f"AND updated_at < datetime('now', ?)"
     )
     return conn.execute(q, (*ACTIVE, f"-{int(minutes)} minutes")).rowcount
+
+
+def get_settings(conn):
+    return {r["name"]: r["value"] for r in conn.execute("SELECT name, value FROM settings")}
+
+
+def set_setting(conn, name, value):
+    conn.execute(
+        "INSERT INTO settings (name, value) VALUES (?, ?) "
+        "ON CONFLICT(name) DO UPDATE SET value = excluded.value",
+        (name, value),
+    )
+
+
+def load_settings():
+    """Apply DB-stored settings to config (process-wide)."""
+    with connect() as conn:
+        config.apply_overrides(get_settings(conn))
+
+
+def campaign_stats(conn, campaign):
+    rows = conn.execute(
+        "SELECT status, digit, COUNT(*) n FROM calls WHERE campaign = ? GROUP BY status, digit",
+        (campaign,),
+    ).fetchall()
+    out = {}
+    for r in rows:
+        key = r["status"].split(":")[0]
+        out[key] = out.get(key, 0) + r["n"]
+        if r["digit"]:
+            out[f"pressed_{r['digit']}"] = out.get(f"pressed_{r['digit']}", 0) + r["n"]
+    return out

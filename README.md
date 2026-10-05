@@ -27,6 +27,17 @@ An outbound sales call to customers who gave **prior express written consent**.
 - **DNC lists:** maintain an internal DNC list, and check state DNC lists and state mini-TCPA laws (FL, OK, MD, WA and others limit call frequency and hours).
 - **Abandonment rate:** keep it ≤3% per 30 days if agents don't pick up in time. Size the 3CX queue to match `MAX_CALLS_PER_MINUTE`.
 
+## Telegram control (from your phone)
+1. Create a bot with @BotFather to get a token. Get your id from @userinfobot.
+2. On a server: put `TELEGRAM_BOT_TOKEN` and `TELEGRAM_OWNER_ID` in `.env`, then run `docker compose up -d --build`. HTTPS for `PUBLIC_URL` points to port 8000.
+3. In the bot:
+   - `/set PLIVO_AUTH_ID ...`, `/set PLIVO_AUTH_TOKEN ...`, `/set CALLER_ID ...`, `/set PUBLIC_URL ...`, `/set THREECX_SIP_URI ...`
+   - `/check`
+   - `/set TEST_NUMBERS +1...`, then `/test +1...`
+   - send the CSV, then `/run name`, `/status`, `/stop`
+- Only `TELEGRAM_OWNER_ID` is answered. Messages with keys are deleted right after saving.
+- The keys still pass through Telegram servers. After testing, rotate the Plivo token, or set secrets only via `.env`.
+
 ## Load and concurrency
 The bottlenecks, in the order they usually show up:
 

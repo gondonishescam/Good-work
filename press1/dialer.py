@@ -21,12 +21,15 @@ from .compliance import Contact, check_contact
 log = logging.getLogger("press1.dialer")
 
 _client = None
+_client_key = None
 
 
 def client():
-    global _client
-    if _client is None:
-        _client = plivo.RestClient(config.PLIVO_AUTH_ID, config.PLIVO_AUTH_TOKEN)
+    global _client, _client_key
+    key = (config.PLIVO_AUTH_ID, config.PLIVO_AUTH_TOKEN)
+    if _client is None or key != _client_key:
+        _client = plivo.RestClient(*key)
+        _client_key = key
     return _client
 
 
@@ -75,8 +78,8 @@ def place_with_retry(contact, cid, attempts=5):
             delay *= 2
 
 
-def wait_for_slot(poll=1.0, sleep=time.sleep):
-    while True:
+def wait_for_slot(poll=1.0, sleep=time.sleep, stop=None):
+    while not (stop and stop.is_set()):
         with db.connect() as conn:
             db.expire_stale(conn, config.STALE_CALL_MINUTES)
             if db.active_calls(conn) < config.MAX_CONCURRENT_CALLS:
@@ -84,7 +87,7 @@ def wait_for_slot(poll=1.0, sleep=time.sleep):
         sleep(poll)
 
 
-def run(csv_path, campaign, dry_run=False, sleep=time.sleep):
+def run(csv_path, campaign, dry_run=False, sleep=time.sleep, stop=None, on_progress=None):
     min_gap = 1.0 / max(config.CALLS_PER_SECOND, 0.01)
     last = 0.0
     stats = {}
@@ -105,7 +108,13 @@ def run(csv_path, campaign, dry_run=False, sleep=time.sleep):
                 bump("would_call")
                 continue
 
-            wait_for_slot(sleep=sleep)
+            if stop and stop.is_set():
+                bump("stopped_before_call")
+                continue
+            wait_for_slot(sleep=sleep, stop=stop)
+            if stop and stop.is_set():
+                bump("stopped_before_call")
+                continue
             gap = min_gap - (time.monotonic() - last)
             if gap > 0:
                 sleep(gap)
@@ -123,8 +132,29 @@ def run(csv_path, campaign, dry_run=False, sleep=time.sleep):
                     db.update_call(conn, cid, status="create_failed")
                 bump("error")
                 print(f"error {contact.phone}: {e}", file=sys.stderr)
+            if on_progress:
+                on_progress(dict(stats))
     print(stats)
     return stats
+
+
+def test_call(phone, campaign="test"):
+    """One call to a number listed in TEST_NUMBERS (your own phones)."""
+    from .compliance import normalize_phone
+    phone = normalize_phone(phone)
+    allowed = {normalize_phone(p) for p in config.TEST_NUMBERS.split(",") if p.strip()}
+    if phone not in allowed:
+        raise ValueError("number is not in TEST_NUMBERS")
+    contact = Contact(phone, "", "UTC", "", "test", "owner")
+    cid = uuid.uuid4().hex
+    with db.connect() as conn:
+        db.log_call(conn, cid, phone, campaign, "queued")
+    try:
+        return place_with_retry(contact, cid)
+    except Exception:
+        with db.connect() as conn:
+            db.update_call(conn, cid, status="create_failed")
+        raise
 
 
 def main():

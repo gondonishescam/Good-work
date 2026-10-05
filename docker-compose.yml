@@ -1,0 +1,16 @@
+services:
+  web:  # Plivo webhooks; put HTTPS (Caddy/nginx/Cloudflare) in front of port 8000
+    build: .
+    command: gunicorn -c gunicorn.conf.py press1.app:app
+    env_file: .env
+    volumes: [data:/data]
+    ports: ["8000:8000"]
+    restart: unless-stopped
+  bot:
+    build: .
+    command: python -m press1.bot
+    env_file: .env
+    volumes: [data:/data]
+    restart: unless-stopped
+volumes:
+  data:

@@ -4,3 +4,4 @@ python-dotenv>=1.0
 pytest>=8.0
 gunicorn>=22
 requests
+python-telegram-bot>=21
