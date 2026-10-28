@@ -1,0 +1,1480 @@
+<title>Poker Pro</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: single-screen poker table with side panels for stats/calculator */
+:root {
+  --bg: #0a0f1a;
+  --bg-surface: #111827;
+  --bg-card: #1e293b;
+  --bg-table: #065f46;
+  --bg-table-felt: #047857;
+  --bg-table-border: #064e3b;
+  --fg: #f1f5f9;
+  --fg-dim: #94a3b8;
+  --fg-muted: #64748b;
+  --accent: #f59e0b;
+  --accent-glow: rgba(245, 158, 11, 0.3);
+  --red: #ef4444;
+  --green: #22c55e;
+  --blue: #3b82f6;
+  --chip-white: #e2e8f0;
+  --chip-red: #dc2626;
+  --chip-blue: #2563eb;
+  --chip-green: #16a34a;
+  --chip-black: #1e293b;
+  --suit-heart: #ef4444;
+  --suit-diamond: #3b82f6;
+  --suit-club: #22c55e;
+  --suit-spade: #f1f5f9;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-body: 'Inter', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-card: #f1f5f9;
+    --fg: #0f172a;
+    --fg-dim: #475569;
+    --fg-muted: #94a3b8;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-card: #f1f5f9;
+  --fg: #0f172a;
+  --fg-dim: #475569;
+  --fg-muted: #94a3b8;
+  color-scheme: light;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  padding: 4px;
+  max-width: 500px;
+}
+.tab-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tab-btn.active {
+  background: var(--accent);
+  color: #000;
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Poker Table */
+.table-container {
+  position: relative;
+  max-width: 800px;
+  margin: 0 auto 16px;
+}
+.poker-table {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  background: radial-gradient(ellipse at center, var(--bg-table-felt), var(--bg-table));
+  border: 6px solid var(--bg-table-border);
+  border-radius: 50%;
+  box-shadow: 0 0 40px rgba(0,0,0,0.5), inset 0 0 60px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  overflow: visible;
+}
+
+/* Community Cards */
+.community-cards {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  z-index: 2;
+}
+
+/* Pot */
+.pot-display {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent-glow);
+  z-index: 2;
+}
+
+/* Player Seats */
+.seat {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 3;
+}
+.seat-0 { bottom: -50px; left: 50%; transform: translateX(-50%); }
+.seat-1 { bottom: 5%; left: 5%; }
+.seat-2 { top: 20%; left: -2%; }
+.seat-3 { top: -40px; left: 25%; }
+.seat-4 { top: -40px; right: 25%; }
+.seat-5 { top: 20%; right: -2%; }
+.seat-6 { bottom: 5%; right: 5%; }
+
+.player-info {
+  background: var(--bg-surface);
+  border: 2px solid var(--bg-card);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  text-align: center;
+  min-width: 90px;
+  transition: border-color 0.3s;
+}
+.player-info.active-turn {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.player-info.folded { opacity: 0.4; }
+.player-info.winner {
+  border-color: var(--green);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.4);
+}
+.player-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.player-stack {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+.player-action {
+  font-size: 10px;
+  color: var(--fg-dim);
+  font-weight: 500;
+  min-height: 14px;
+}
+.player-cards {
+  display: flex;
+  gap: 3px;
+}
+.player-bet {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  min-height: 16px;
+}
+.dealer-btn {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: var(--accent);
+  color: #000;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Cards */
+.card {
+  width: 40px;
+  height: 56px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  user-select: none;
+  transition: transform 0.3s;
+}
+.card-front {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.card-back {
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  border: 1px solid #1e3a5f;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.card-back::after {
+  content: '';
+  width: 26px;
+  height: 38px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 3px;
+  background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.05) 3px, rgba(255,255,255,0.05) 6px);
+}
+.card .rank { color: inherit; }
+.card .suit { font-size: 16px; line-height: 1; }
+.card.hearts, .card.diamonds { color: var(--suit-heart); }
+.card.clubs { color: var(--suit-club); }
+.card.spades { color: #1e293b; }
+.community-cards .card { width: 48px; height: 66px; font-size: 15px; }
+.community-cards .card .suit { font-size: 18px; }
+
+/* Actions */
+.actions-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+}
+.action-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.btn-fold { background: var(--red); color: #fff; }
+.btn-check { background: var(--bg-card); color: var(--fg); border: 1px solid var(--fg-muted); }
+.btn-call { background: var(--blue); color: #fff; }
+.btn-raise { background: var(--green); color: #fff; }
+.btn-allin { background: var(--accent); color: #000; }
+
+.raise-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.raise-input {
+  width: 80px;
+  padding: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--fg-muted);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  text-align: center;
+}
+.raise-preset {
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--fg-muted);
+  border-radius: 4px;
+  color: var(--fg-dim);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+}
+.raise-preset:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Info panel */
+.info-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.info-chip {
+  background: var(--bg-surface);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--fg-dim);
+}
+.info-chip strong { color: var(--fg); }
+
+/* Hand result */
+.hand-result {
+  text-align: center;
+  padding: 10px;
+  margin-top: 8px;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--green);
+  display: none;
+}
+.hand-result.visible { display: block; }
+.hand-result.lost { color: var(--red); }
+
+/* Stats Tab */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.stat-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+}
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--fg-dim);
+  margin-top: 4px;
+}
+.hand-history {
+  max-width: 800px;
+  margin: 16px auto 0;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.hand-history h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--fg-dim);
+}
+.history-entry {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bg-card);
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+}
+.history-entry:last-child { border-bottom: none; }
+.history-win { color: var(--green); }
+.history-loss { color: var(--red); }
+
+/* Equity Calculator Tab */
+.calc-container {
+  max-width: 700px;
+  margin: 0 auto;
+}
+.calc-section {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.calc-section h3 {
+  font-size: 13px;
+  color: var(--fg-dim);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.card-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pick-card {
+  width: 36px;
+  height: 48px;
+  border-radius: 4px;
+  background: #fff;
+  border: 2px solid #d1d5db;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.pick-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.pick-card.selected { border-color: var(--accent); background: rgba(245,158,11,0.1); box-shadow: 0 0 8px var(--accent-glow); }
+.pick-card.used { opacity: 0.2; pointer-events: none; }
+.pick-card.hearts, .pick-card.diamonds { color: var(--suit-heart); }
+.pick-card.clubs { color: var(--suit-club); }
+.pick-card.spades { color: #1e293b; }
+
+.calc-results {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.equity-bar {
+  height: 8px;
+  background: var(--bg-card);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.equity-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s;
+}
+.equity-fill.hero { background: var(--green); }
+.equity-fill.villain { background: var(--red); }
+
+.selected-cards-display {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-height: 52px;
+  align-items: center;
+}
+.card-slot {
+  width: 38px;
+  height: 52px;
+  border: 2px dashed var(--fg-muted);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--fg-muted);
+}
+.card-slot.filled {
+  border-style: solid;
+  border-color: var(--accent);
+  background: #fff;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  flex-direction: column;
+  line-height: 1;
+}
+.card-slot.filled.hearts, .card-slot.filled.diamonds { color: var(--suit-heart); }
+.card-slot.filled.clubs { color: var(--suit-club); }
+.card-slot.filled.spades { color: #1e293b; }
+.calc-btn {
+  padding: 10px 24px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.calc-btn:hover { filter: brightness(1.1); }
+.clear-btn {
+  padding: 10px 16px;
+  background: var(--bg-card);
+  color: var(--fg-dim);
+  border: 1px solid var(--fg-muted);
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 8px;
+  margin-left: 8px;
+}
+
+/* Game controls */
+.game-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.ctrl-btn {
+  padding: 8px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--fg-muted);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ctrl-btn:hover { border-color: var(--accent); }
+
+.game-mode-label {
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .poker-table { aspect-ratio: 1.6 / 1; }
+  .card { width: 32px; height: 44px; font-size: 11px; }
+  .card .suit { font-size: 13px; }
+  .community-cards .card { width: 38px; height: 52px; font-size: 12px; }
+  .community-cards .card .suit { font-size: 15px; }
+  .player-info { min-width: 70px; padding: 3px 6px; }
+  .player-name { font-size: 10px; }
+  .player-stack { font-size: 10px; }
+  .action-btn { padding: 8px 14px; font-size: 13px; }
+  .seat-2, .seat-5 { top: 30%; }
+  .seat-3, .seat-4 { top: -35px; }
+  .pick-card { width: 30px; height: 40px; font-size: 10px; }
+}
+</style>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('game')">Игра</button>
+  <button class="tab-btn" onclick="switchTab('calc')">Калькулятор</button>
+  <button class="tab-btn" onclick="switchTab('stats')">Статистика</button>
+</div>
+
+<!-- GAME TAB -->
+<div id="tab-game" class="tab-content active">
+  <div class="game-controls">
+    <select id="game-type" class="ctrl-btn" onchange="resetGame()">
+      <option value="holdem">Texas Hold'em</option>
+      <option value="omaha">Omaha PLO4</option>
+    </select>
+    <select id="player-count" class="ctrl-btn" onchange="resetGame()">
+      <option value="3">3 игрока</option>
+      <option value="5">5 игроков</option>
+      <option value="7" selected>7 игроков</option>
+    </select>
+    <button class="ctrl-btn" onclick="resetGame()">Новый стол</button>
+  </div>
+  <div class="game-mode-label" id="mode-label">NL Hold'em | Блайнды 10/20</div>
+
+  <div class="table-container">
+    <div class="poker-table" id="poker-table">
+      <div class="pot-display" id="pot-display">Пот: 0</div>
+      <div class="community-cards" id="community-cards"></div>
+    </div>
+  </div>
+
+  <div class="actions-bar" id="actions-bar">
+    <button class="action-btn btn-fold" id="btn-fold" onclick="playerAction('fold')" disabled>Фолд</button>
+    <button class="action-btn btn-check" id="btn-check" onclick="playerAction('check')" disabled>Чек</button>
+    <button class="action-btn btn-call" id="btn-call" onclick="playerAction('call')" disabled>Колл</button>
+    <div class="raise-controls">
+      <input type="number" class="raise-input" id="raise-input" min="0" value="0">
+      <button class="action-btn btn-raise" id="btn-raise" onclick="playerAction('raise')" disabled>Рейз</button>
+    </div>
+    <button class="action-btn btn-allin" id="btn-allin" onclick="playerAction('allin')" disabled>Олл-ин</button>
+    <div style="display:flex;gap:4px;">
+      <button class="raise-preset" onclick="setRaisePreset(0.5)">50%</button>
+      <button class="raise-preset" onclick="setRaisePreset(0.75)">75%</button>
+      <button class="raise-preset" onclick="setRaisePreset(1)">Пот</button>
+    </div>
+  </div>
+
+  <div class="info-row" id="info-row"></div>
+  <div class="hand-result" id="hand-result"></div>
+</div>
+
+<!-- CALCULATOR TAB -->
+<div id="tab-calc" class="tab-content">
+  <div class="calc-container">
+    <div class="calc-section">
+      <h3>Ваша рука</h3>
+      <div class="selected-cards-display" id="hero-display"></div>
+      <h3>Рука оппонента</h3>
+      <div class="selected-cards-display" id="villain-display"></div>
+      <h3>Борд</h3>
+      <div class="selected-cards-display" id="board-display"></div>
+      <div style="display:flex;gap:6px;margin:10px 0;">
+        <button class="raise-preset" onclick="setCalcTarget('hero')" id="pick-hero" style="border-color:var(--accent);color:var(--accent)">Моя рука</button>
+        <button class="raise-preset" onclick="setCalcTarget('villain')" id="pick-villain">Оппонент</button>
+        <button class="raise-preset" onclick="setCalcTarget('board')" id="pick-board">Борд</button>
+      </div>
+      <div class="card-picker" id="card-picker"></div>
+      <div style="margin-top:12px;">
+        <button class="calc-btn" onclick="runEquityCalc()">Рассчитать</button>
+        <button class="clear-btn" onclick="clearCalc()">Очистить</button>
+      </div>
+    </div>
+    <div class="calc-section" id="calc-results" style="display:none;">
+      <div class="calc-results">
+        <div>
+          <div style="font-size:13px;color:var(--fg-dim);">Ваш эквити</div>
+          <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:var(--green);" id="hero-equity">—</div>
+          <div class="equity-bar"><div class="equity-fill hero" id="hero-bar" style="width:0%"></div></div>
+        </div>
+        <div>
+          <div style="font-size:13px;color:var(--fg-dim);">Эквити оппонента</div>
+          <div style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:var(--red);" id="villain-equity">—</div>
+          <div class="equity-bar"><div class="equity-fill villain" id="villain-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:13px;color:var(--fg-dim);" id="equity-detail"></div>
+    </div>
+  </div>
+</div>
+
+<!-- STATS TAB -->
+<div id="tab-stats" class="tab-content">
+  <div class="stats-grid" id="stats-grid"></div>
+  <div class="hand-history" id="hand-history">
+    <h3>История рук</h3>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+const SUITS = ['hearts','diamonds','clubs','spades'];
+const SUIT_SYMBOLS = {hearts:'♥',diamonds:'♦',clubs:'♣',spades:'♠'};
+const RANKS = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+const RANK_VALUES = {2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,T:10,J:11,Q:12,K:13,A:14};
+const HAND_NAMES = ['Старшая карта','Пара','Две пары','Тройка','Стрит','Флеш','Фулл-хаус','Каре','Стрит-флеш','Роял-флеш'];
+const AI_NAMES = ['Shark','Titan','Blaze','Viper','Ghost','Storm'];
+const AI_STYLES = ['tight-aggressive','loose-aggressive','tight-passive','maniac','calling-station','balanced'];
+
+let game = null;
+let stats = {hands:0,wins:0,losses:0,biggestWin:0,totalWon:0,totalLost:0,vpip:0,vpipHands:0,pfr:0,pfrHands:0,showdowns:0,showdownWins:0};
+
+function makeDeck() {
+  let d = [];
+  for (let s of SUITS) for (let r of RANKS) d.push({rank:r, suit:s});
+  return d;
+}
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function cardHtml(c, faceDown) {
+  if (faceDown) return '<div class="card card-back"></div>';
+  return `<div class="card card-front ${c.suit}"><span class="rank">${c.rank}</span><span class="suit">${SUIT_SYMBOLS[c.suit]}</span></div>`;
+}
+
+function evaluateHand(cards) {
+  if (cards.length < 5) return {rank:0,val:[0],name:'—'};
+  let best = null;
+  let combos = combinations(cards, 5);
+  for (let combo of combos) {
+    let ev = eval5(combo);
+    if (!best || compareHands(ev, best) > 0) best = ev;
+  }
+  return best;
+}
+
+function combinations(arr, k) {
+  if (k === 0) return [[]];
+  if (arr.length === 0) return [];
+  let result = [];
+  let [first, ...rest] = arr;
+  for (let c of combinations(rest, k - 1)) result.push([first, ...c]);
+  for (let c of combinations(rest, k)) result.push(c);
+  return result;
+}
+
+function eval5(cards) {
+  let vals = cards.map(c => RANK_VALUES[c.rank]).sort((a,b) => b - a);
+  let suits = cards.map(c => c.suit);
+  let isFlush = suits.every(s => s === suits[0]);
+  let isStraight = false;
+  let straightHigh = 0;
+  let unique = [...new Set(vals)].sort((a,b) => b - a);
+
+  if (unique.length === 5) {
+    if (unique[0] - unique[4] === 4) { isStraight = true; straightHigh = unique[0]; }
+    if (unique[0] === 14 && unique[1] === 5 && unique[4] === 2) { isStraight = true; straightHigh = 5; }
+  }
+
+  let counts = {};
+  vals.forEach(v => counts[v] = (counts[v] || 0) + 1);
+  let groups = Object.entries(counts).map(([v,c]) => ({val:+v, count:c}));
+  groups.sort((a,b) => b.count - a.count || b.val - a.val);
+
+  if (isStraight && isFlush && straightHigh === 14) return {rank:9, val:[14], name:HAND_NAMES[9]};
+  if (isStraight && isFlush) return {rank:8, val:[straightHigh], name:HAND_NAMES[8]};
+  if (groups[0].count === 4) return {rank:7, val:[groups[0].val, groups[1].val], name:HAND_NAMES[7]};
+  if (groups[0].count === 3 && groups[1].count === 2) return {rank:6, val:[groups[0].val, groups[1].val], name:HAND_NAMES[6]};
+  if (isFlush) return {rank:5, val:vals, name:HAND_NAMES[5]};
+  if (isStraight) return {rank:4, val:[straightHigh], name:HAND_NAMES[4]};
+  if (groups[0].count === 3) return {rank:3, val:[groups[0].val, ...groups.slice(1).map(g=>g.val)], name:HAND_NAMES[3]};
+  if (groups[0].count === 2 && groups[1].count === 2) return {rank:2, val:[Math.max(groups[0].val,groups[1].val), Math.min(groups[0].val,groups[1].val), groups[2].val], name:HAND_NAMES[2]};
+  if (groups[0].count === 2) return {rank:1, val:[groups[0].val, ...groups.slice(1).map(g=>g.val)], name:HAND_NAMES[1]};
+  return {rank:0, val:vals, name:HAND_NAMES[0]};
+}
+
+function compareHands(a, b) {
+  if (a.rank !== b.rank) return a.rank - b.rank;
+  for (let i = 0; i < Math.min(a.val.length, b.val.length); i++) {
+    if (a.val[i] !== b.val[i]) return a.val[i] - b.val[i];
+  }
+  return 0;
+}
+
+function handStrength(holeCards, board) {
+  let all = [...holeCards, ...board];
+  if (all.length < 5) {
+    let vals = holeCards.map(c => RANK_VALUES[c.rank]).sort((a,b) => b - a);
+    let paired = vals[0] === (vals[1] || 0);
+    let suited = holeCards.length >= 2 && holeCards[0].suit === holeCards[1].suit;
+    let high = vals[0];
+    let score = high / 14;
+    if (paired) score += 0.4;
+    if (suited) score += 0.1;
+    if (holeCards.length >= 2) {
+      let gap = vals[0] - vals[1];
+      if (gap <= 2 && !paired) score += 0.08;
+    }
+    return Math.min(score, 1);
+  }
+  let ev = evaluateHand(all);
+  return (ev.rank * 10 + ev.val[0] / 14) / 90;
+}
+
+class PokerGame {
+  constructor(playerCount, gameType) {
+    this.gameType = gameType;
+    this.holeCardCount = gameType === 'omaha' ? 4 : 2;
+    this.smallBlind = 10;
+    this.bigBlind = 20;
+    this.playerCount = playerCount;
+    this.players = [];
+    this.dealer = 0;
+    this.pot = 0;
+    this.sidePots = [];
+    this.board = [];
+    this.deck = [];
+    this.currentBet = 0;
+    this.round = 'preflop';
+    this.activeIndex = -1;
+    this.handInProgress = false;
+    this.roundActed = new Set();
+
+    for (let i = 0; i < playerCount; i++) {
+      this.players.push({
+        name: i === 0 ? 'Вы' : AI_NAMES[(i - 1) % AI_NAMES.length],
+        stack: 1000,
+        hole: [],
+        bet: 0,
+        totalBet: 0,
+        folded: false,
+        allIn: false,
+        isHuman: i === 0,
+        style: i === 0 ? null : AI_STYLES[(i - 1) % AI_STYLES.length],
+        seatIndex: i,
+        lastAction: ''
+      });
+    }
+    this.startHand();
+  }
+
+  startHand() {
+    this.deck = shuffle(makeDeck());
+    this.board = [];
+    this.pot = 0;
+    this.currentBet = 0;
+    this.round = 'preflop';
+    this.handInProgress = true;
+    this.roundActed = new Set();
+
+    for (let p of this.players) {
+      p.hole = [];
+      p.bet = 0;
+      p.totalBet = 0;
+      p.folded = false;
+      p.allIn = false;
+      p.lastAction = '';
+    }
+
+    for (let i = 0; i < this.holeCardCount; i++) {
+      for (let p of this.players) {
+        if (p.stack > 0) p.hole.push(this.deck.pop());
+      }
+    }
+
+    let sb = (this.dealer + 1) % this.playerCount;
+    let bb = (this.dealer + 2) % this.playerCount;
+    this.postBlind(sb, this.smallBlind);
+    this.postBlind(bb, this.bigBlind);
+    this.currentBet = this.bigBlind;
+    this.activeIndex = (bb + 1) % this.playerCount;
+    this.skipFolded();
+
+    stats.hands++;
+    stats.vpipHands++;
+    stats.pfrHands++;
+
+    this.render();
+    if (!this.players[this.activeIndex].isHuman) {
+      this.runAI();
+    }
+  }
+
+  postBlind(idx, amount) {
+    let p = this.players[idx];
+    let actual = Math.min(amount, p.stack);
+    p.bet = actual;
+    p.totalBet = actual;
+    p.stack -= actual;
+    this.pot += actual;
+    if (p.stack === 0) p.allIn = true;
+  }
+
+  skipFolded() {
+    let attempts = 0;
+    while ((this.players[this.activeIndex].folded || this.players[this.activeIndex].allIn) && attempts < this.playerCount) {
+      this.activeIndex = (this.activeIndex + 1) % this.playerCount;
+      attempts++;
+    }
+  }
+
+  getActivePlayers() {
+    return this.players.filter(p => !p.folded && p.stack > 0 && !p.allIn);
+  }
+
+  isRoundOver() {
+    let active = this.players.filter(p => !p.folded);
+    if (active.length <= 1) return true;
+    let notAllIn = active.filter(p => !p.allIn);
+    if (notAllIn.length === 0) return true;
+    if (notAllIn.length === 1 && notAllIn[0].bet >= this.currentBet && this.roundActed.has(notAllIn[0].seatIndex)) return true;
+    for (let p of notAllIn) {
+      if (!this.roundActed.has(p.seatIndex)) return false;
+      if (p.bet < this.currentBet) return false;
+    }
+    return true;
+  }
+
+  nextRound() {
+    let active = this.players.filter(p => !p.folded);
+    if (active.length <= 1) {
+      this.endHand();
+      return;
+    }
+
+    for (let p of this.players) p.bet = 0;
+    this.currentBet = 0;
+    this.roundActed = new Set();
+
+    if (this.round === 'preflop') {
+      this.round = 'flop';
+      this.board.push(this.deck.pop(), this.deck.pop(), this.deck.pop());
+    } else if (this.round === 'flop') {
+      this.round = 'turn';
+      this.board.push(this.deck.pop());
+    } else if (this.round === 'turn') {
+      this.round = 'river';
+      this.board.push(this.deck.pop());
+    } else {
+      this.endHand();
+      return;
+    }
+
+    this.activeIndex = (this.dealer + 1) % this.playerCount;
+    this.skipFolded();
+    this.render();
+
+    let activePlayers = this.getActivePlayers();
+    if (activePlayers.length <= 1) {
+      if (this.board.length < 5) {
+        setTimeout(() => this.nextRound(), 600);
+      } else {
+        this.endHand();
+      }
+      return;
+    }
+
+    if (!this.players[this.activeIndex].isHuman) {
+      this.runAI();
+    }
+  }
+
+  applyAction(playerIdx, action, amount = 0) {
+    let p = this.players[playerIdx];
+    p.lastAction = action;
+    this.roundActed.add(p.seatIndex);
+
+    if (action === 'fold') {
+      p.folded = true;
+    } else if (action === 'check') {
+      // nothing
+    } else if (action === 'call') {
+      let toCall = Math.min(this.currentBet - p.bet, p.stack);
+      p.stack -= toCall;
+      this.pot += toCall;
+      p.bet += toCall;
+      p.totalBet += toCall;
+      if (p.stack === 0) p.allIn = true;
+    } else if (action === 'raise') {
+      let total = amount;
+      let toAdd = total - p.bet;
+      toAdd = Math.min(toAdd, p.stack);
+      p.stack -= toAdd;
+      this.pot += toAdd;
+      p.bet += toAdd;
+      p.totalBet += toAdd;
+      this.currentBet = p.bet;
+      if (p.stack === 0) p.allIn = true;
+      this.roundActed = new Set([p.seatIndex]);
+    } else if (action === 'allin') {
+      let toAdd = p.stack;
+      this.pot += toAdd;
+      p.bet += toAdd;
+      p.totalBet += toAdd;
+      if (p.bet > this.currentBet) {
+        this.currentBet = p.bet;
+        this.roundActed = new Set([p.seatIndex]);
+      }
+      p.stack -= toAdd;
+      p.stack = 0;
+      p.allIn = true;
+    }
+
+    if (playerIdx === 0 && (action === 'call' || action === 'raise' || action === 'allin')) {
+      stats.vpip++;
+      if (action === 'raise' || action === 'allin') stats.pfr++;
+    }
+
+    this.activeIndex = (playerIdx + 1) % this.playerCount;
+    this.skipFolded();
+
+    this.render();
+
+    if (this.isRoundOver()) {
+      setTimeout(() => this.nextRound(), 500);
+    } else if (!this.players[this.activeIndex].isHuman) {
+      setTimeout(() => this.runAI(), 400);
+    }
+  }
+
+  runAI() {
+    if (!this.handInProgress) return;
+    let p = this.players[this.activeIndex];
+    if (p.isHuman || p.folded || p.allIn) return;
+
+    let strength = handStrength(p.hole, this.board);
+    let style = p.style;
+    let toCall = this.currentBet - p.bet;
+    let potOdds = toCall > 0 ? toCall / (this.pot + toCall) : 0;
+    let pos = this.getPosition(this.activeIndex);
+
+    let r = Math.random();
+    let aggression = 0.5;
+    let looseThreshold = 0.3;
+
+    switch (style) {
+      case 'tight-aggressive': aggression = 0.7; looseThreshold = 0.4; break;
+      case 'loose-aggressive': aggression = 0.8; looseThreshold = 0.2; break;
+      case 'tight-passive': aggression = 0.25; looseThreshold = 0.45; break;
+      case 'maniac': aggression = 0.9; looseThreshold = 0.1; break;
+      case 'calling-station': aggression = 0.15; looseThreshold = 0.15; break;
+      case 'balanced': aggression = 0.5; looseThreshold = 0.3; break;
+    }
+
+    if (pos === 'late') { looseThreshold -= 0.08; aggression += 0.05; }
+    if (pos === 'early') { looseThreshold += 0.05; }
+
+    let action, amount;
+
+    if (strength < looseThreshold - 0.1 && toCall > 0) {
+      action = 'fold';
+    } else if (strength < looseThreshold && toCall > this.bigBlind * 3) {
+      action = r < 0.15 ? 'call' : 'fold';
+    } else if (toCall === 0) {
+      if (strength > 0.7 && r < aggression) {
+        action = 'raise';
+        amount = this.currentBet + Math.floor(this.pot * (0.5 + strength * 0.5));
+      } else if (strength > 0.85 && r < 0.15) {
+        action = 'allin';
+      } else {
+        action = 'check';
+      }
+    } else {
+      if (strength > 0.8 && r < aggression) {
+        if (strength > 0.92 && r < 0.3) {
+          action = 'allin';
+        } else {
+          action = 'raise';
+          amount = this.currentBet + Math.floor(this.pot * (0.5 + strength));
+        }
+      } else if (strength > potOdds || r < (1 - looseThreshold) * 0.5) {
+        action = 'call';
+      } else {
+        action = r < 0.1 ? 'call' : 'fold';
+      }
+    }
+
+    if (action === 'raise') {
+      amount = Math.max(amount || this.currentBet * 2, this.currentBet + this.bigBlind);
+      amount = Math.min(amount, p.stack + p.bet);
+      if (this.gameType === 'omaha') {
+        let maxRaise = p.bet + this.pot + (this.currentBet - p.bet) * 2;
+        amount = Math.min(amount, maxRaise);
+      }
+    }
+
+    this.applyAction(this.activeIndex, action, amount);
+  }
+
+  getPosition(idx) {
+    let dist = (idx - this.dealer + this.playerCount) % this.playerCount;
+    if (dist <= Math.floor(this.playerCount / 3)) return 'early';
+    if (dist <= Math.floor(this.playerCount * 2 / 3)) return 'middle';
+    return 'late';
+  }
+
+  endHand() {
+    this.handInProgress = false;
+    let active = this.players.filter(p => !p.folded);
+    let resultEl = document.getElementById('hand-result');
+    let resultText = '';
+
+    if (active.length === 1) {
+      let winner = active[0];
+      winner.stack += this.pot;
+      winner.lastAction = 'Выиграл ' + this.pot;
+      resultText = `${winner.name} забирает пот ${this.pot}`;
+      if (winner.isHuman) {
+        stats.wins++;
+        stats.totalWon += this.pot;
+        stats.biggestWin = Math.max(stats.biggestWin, this.pot);
+        resultEl.className = 'hand-result visible';
+      } else {
+        stats.losses++;
+        let lost = this.players[0].totalBet;
+        stats.totalLost += lost;
+        resultEl.className = 'hand-result visible lost';
+      }
+    } else {
+      while (this.board.length < 5) this.board.push(this.deck.pop());
+      stats.showdowns++;
+
+      let bestHands = active.map(p => {
+        let available = [...p.hole, ...this.board];
+        if (this.gameType === 'omaha') {
+          let best = null;
+          let holeCombos = combinations(p.hole, 2);
+          let boardCombos = combinations(this.board, 3);
+          for (let hc of holeCombos) {
+            for (let bc of boardCombos) {
+              let ev = evaluateHand([...hc, ...bc]);
+              if (!best || compareHands(ev, best) > 0) best = ev;
+            }
+          }
+          return {player: p, hand: best};
+        } else {
+          return {player: p, hand: evaluateHand(available)};
+        }
+      });
+
+      bestHands.sort((a,b) => compareHands(b.hand, a.hand));
+      let winnerHand = bestHands[0].hand;
+      let winners = bestHands.filter(bh => compareHands(bh.hand, winnerHand) === 0);
+      let share = Math.floor(this.pot / winners.length);
+
+      for (let w of winners) {
+        w.player.stack += share;
+        w.player.lastAction = `${w.hand.name}!`;
+      }
+
+      let winnerNames = winners.map(w => w.player.name).join(', ');
+      resultText = `${winnerNames}: ${winnerHand.name} | Пот ${this.pot}`;
+
+      let heroWon = winners.some(w => w.player.isHuman);
+      if (heroWon) {
+        stats.wins++;
+        stats.showdownWins++;
+        stats.totalWon += share;
+        stats.biggestWin = Math.max(stats.biggestWin, share);
+        resultEl.className = 'hand-result visible';
+      } else {
+        stats.losses++;
+        let lost = this.players[0].totalBet;
+        stats.totalLost += lost;
+        resultEl.className = 'hand-result visible lost';
+      }
+
+      for (let bh of bestHands) {
+        let p = bh.player;
+        if (!p.isHuman) p.lastAction = bh.hand.name;
+      }
+    }
+
+    resultEl.textContent = resultText;
+    addHistory(resultText, active.some(a => a.isHuman && active.length === 1) || resultEl.className.includes('visible') && !resultEl.className.includes('lost'));
+
+    this.render(true);
+
+    this.dealer = (this.dealer + 1) % this.playerCount;
+    setTimeout(() => {
+      if (this.players[0].stack <= 0) {
+        this.players[0].stack = 1000;
+        resultEl.textContent = 'Ребай! Стек восстановлен до 1000.';
+        resultEl.className = 'hand-result visible lost';
+      }
+      for (let p of this.players) {
+        if (!p.isHuman && p.stack <= 0) p.stack = 1000;
+      }
+      this.startHand();
+    }, 2500);
+  }
+
+  render(showdown = false) {
+    let table = document.getElementById('poker-table');
+    table.querySelectorAll('.seat').forEach(s => s.remove());
+
+    document.getElementById('pot-display').textContent = `Пот: ${this.pot}`;
+
+    let cc = document.getElementById('community-cards');
+    cc.innerHTML = this.board.map(c => cardHtml(c)).join('');
+
+    let positions = this.getSeatPositions();
+
+    for (let i = 0; i < this.players.length; i++) {
+      let p = this.players[i];
+      let seat = document.createElement('div');
+      seat.className = 'seat';
+      let pos = positions[i];
+      seat.style.cssText = pos;
+
+      let isActive = (i === this.activeIndex && this.handInProgress);
+      let isWinner = p.lastAction && p.lastAction.startsWith('Выиграл');
+
+      let cardsHtml = '';
+      if (p.hole.length > 0) {
+        if (p.isHuman || showdown) {
+          cardsHtml = p.hole.map(c => cardHtml(c)).join('');
+        } else {
+          cardsHtml = p.hole.map(() => cardHtml(null, true)).join('');
+        }
+      }
+
+      seat.innerHTML = `
+        <div class="player-cards">${cardsHtml}</div>
+        <div class="player-info ${isActive ? 'active-turn' : ''} ${p.folded ? 'folded' : ''} ${isWinner ? 'winner' : ''}">
+          <div class="player-name">${p.name}${i === this.dealer ? ' <span style="color:var(--accent)">D</span>' : ''}</div>
+          <div class="player-stack">${p.stack}</div>
+          <div class="player-action">${p.lastAction}</div>
+        </div>
+        <div class="player-bet">${p.bet > 0 ? p.bet : ''}</div>
+      `;
+      table.appendChild(seat);
+    }
+
+    this.updateActions();
+    this.updateInfo();
+  }
+
+  getSeatPositions() {
+    let n = this.playerCount;
+    if (n <= 3) {
+      return [
+        'bottom:-50px;left:50%;transform:translateX(-50%)',
+        'top:20%;left:-2%',
+        'top:20%;right:-2%'
+      ];
+    }
+    if (n <= 5) {
+      return [
+        'bottom:-50px;left:50%;transform:translateX(-50%)',
+        'bottom:10%;left:2%',
+        'top:10%;left:15%',
+        'top:10%;right:15%',
+        'bottom:10%;right:2%'
+      ];
+    }
+    return [
+      'bottom:-50px;left:50%;transform:translateX(-50%)',
+      'bottom:5%;left:3%',
+      'top:22%;left:-2%',
+      'top:-40px;left:25%',
+      'top:-40px;right:25%',
+      'top:22%;right:-2%',
+      'bottom:5%;right:3%'
+    ];
+  }
+
+  updateActions() {
+    let btns = {fold:'btn-fold',check:'btn-check',call:'btn-call',raise:'btn-raise',allin:'btn-allin'};
+    for (let k in btns) document.getElementById(btns[k]).disabled = true;
+
+    if (!this.handInProgress || this.activeIndex !== 0) return;
+
+    let p = this.players[0];
+    if (p.folded || p.allIn) return;
+
+    let toCall = this.currentBet - p.bet;
+
+    document.getElementById('btn-fold').disabled = false;
+    document.getElementById('btn-allin').disabled = false;
+
+    if (toCall === 0) {
+      document.getElementById('btn-check').disabled = false;
+    }
+    if (toCall > 0 && toCall <= p.stack) {
+      document.getElementById('btn-call').disabled = false;
+      document.getElementById('btn-call').textContent = `Колл ${toCall}`;
+    }
+    if (p.stack > toCall) {
+      document.getElementById('btn-raise').disabled = false;
+      let minRaise = this.currentBet + this.bigBlind;
+      let ri = document.getElementById('raise-input');
+      ri.min = minRaise;
+      ri.max = this.gameType === 'omaha' ? p.bet + this.pot + toCall * 2 : p.stack + p.bet;
+      ri.value = Math.min(minRaise * 2, +ri.max);
+    }
+  }
+
+  updateInfo() {
+    let p = this.players[0];
+    let infoRow = document.getElementById('info-row');
+    let handEval = evaluateHand([...p.hole, ...this.board]);
+    let strength = this.board.length >= 3 ? handEval.name : '—';
+
+    infoRow.innerHTML = `
+      <span class="info-chip"><strong>Стек:</strong> ${p.stack}</span>
+      <span class="info-chip"><strong>Раунд:</strong> ${this.round}</span>
+      <span class="info-chip"><strong>Рука:</strong> ${strength}</span>
+      <span class="info-chip"><strong>Позиция:</strong> ${this.getPosition(0)}</span>
+    `;
+  }
+}
+
+function playerAction(action) {
+  if (!game || !game.handInProgress) return;
+  let amount = 0;
+  if (action === 'raise') {
+    amount = parseInt(document.getElementById('raise-input').value) || 0;
+    let minRaise = game.currentBet + game.bigBlind;
+    if (amount < minRaise) amount = minRaise;
+  }
+  game.applyAction(0, action, amount);
+}
+
+function setRaisePreset(fraction) {
+  if (!game) return;
+  let ri = document.getElementById('raise-input');
+  let val = Math.floor(game.pot * fraction) + game.currentBet;
+  val = Math.max(val, game.currentBet + game.bigBlind);
+  val = Math.min(val, parseInt(ri.max) || val);
+  ri.value = val;
+}
+
+function resetGame() {
+  let type = document.getElementById('game-type').value;
+  let count = parseInt(document.getElementById('player-count').value);
+  document.getElementById('hand-result').className = 'hand-result';
+  let label = type === 'omaha' ? 'PLO4 Omaha' : 'NL Hold\'em';
+  document.getElementById('mode-label').textContent = `${label} | Блайнды 10/20`;
+  game = new PokerGame(count, type);
+}
+
+function addHistory(text, won) {
+  let list = document.getElementById('history-list');
+  let entry = document.createElement('div');
+  entry.className = 'history-entry';
+  entry.innerHTML = `<span>${text}</span><span class="${won ? 'history-win' : 'history-loss'}">${won ? 'WIN' : 'LOSS'}</span>`;
+  list.prepend(entry);
+  if (list.children.length > 50) list.removeChild(list.lastChild);
+}
+
+/* TABS */
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['game','calc','stats'][i] === name));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'stats') renderStats();
+}
+
+/* STATS */
+function renderStats() {
+  let sg = document.getElementById('stats-grid');
+  let vpipPct = stats.vpipHands > 0 ? Math.round(stats.vpip / stats.vpipHands * 100) : 0;
+  let pfrPct = stats.pfrHands > 0 ? Math.round(stats.pfr / stats.pfrHands * 100) : 0;
+  let winRate = stats.hands > 0 ? Math.round(stats.wins / stats.hands * 100) : 0;
+  let sdWin = stats.showdowns > 0 ? Math.round(stats.showdownWins / stats.showdowns * 100) : 0;
+  let profit = stats.totalWon - stats.totalLost;
+
+  sg.innerHTML = [
+    {v: stats.hands, l: 'Рук сыграно'},
+    {v: winRate + '%', l: 'Винрейт'},
+    {v: vpipPct + '%', l: 'VPIP'},
+    {v: pfrPct + '%', l: 'PFR'},
+    {v: sdWin + '%', l: 'W$SD'},
+    {v: stats.biggestWin, l: 'Макс. выигрыш'},
+    {v: (profit >= 0 ? '+' : '') + profit, l: 'Профит'},
+    {v: stats.showdowns, l: 'Шоудаунов'}
+  ].map(s => `<div class="stat-card"><div class="stat-value">${s.v}</div><div class="stat-label">${s.l}</div></div>`).join('');
+}
+
+/* EQUITY CALCULATOR */
+let calcTarget = 'hero';
+let calcHero = [], calcVillain = [], calcBoard = [];
+
+function initCalcPicker() {
+  let picker = document.getElementById('card-picker');
+  picker.innerHTML = '';
+  for (let s of SUITS) {
+    for (let r of RANKS) {
+      let div = document.createElement('div');
+      div.className = `pick-card ${s}`;
+      div.dataset.rank = r;
+      div.dataset.suit = s;
+      div.innerHTML = `<span>${r}</span><span>${SUIT_SYMBOLS[s]}</span>`;
+      div.onclick = () => pickCalcCard(r, s, div);
+      picker.appendChild(div);
+    }
+  }
+  updateCalcDisplay();
+}
+
+function setCalcTarget(t) {
+  calcTarget = t;
+  document.getElementById('pick-hero').style.borderColor = t === 'hero' ? 'var(--accent)' : '';
+  document.getElementById('pick-hero').style.color = t === 'hero' ? 'var(--accent)' : '';
+  document.getElementById('pick-villain').style.borderColor = t === 'villain' ? 'var(--accent)' : '';
+  document.getElementById('pick-villain').style.color = t === 'villain' ? 'var(--accent)' : '';
+  document.getElementById('pick-board').style.borderColor = t === 'board' ? 'var(--accent)' : '';
+  document.getElementById('pick-board').style.color = t === 'board' ? 'var(--accent)' : '';
+}
+
+function pickCalcCard(rank, suit, el) {
+  let card = {rank, suit};
+  let arr = calcTarget === 'hero' ? calcHero : calcTarget === 'villain' ? calcVillain : calcBoard;
+  let maxCards = calcTarget === 'board' ? 5 : 2;
+
+  let existIdx = arr.findIndex(c => c.rank === rank && c.suit === suit);
+  if (existIdx >= 0) {
+    arr.splice(existIdx, 1);
+    el.classList.remove('selected');
+  } else if (arr.length < maxCards) {
+    arr.push(card);
+    el.classList.add('selected');
+  }
+  updateCalcDisplay();
+  updatePickerUsed();
+}
+
+function updateCalcDisplay() {
+  for (let [id, arr, max] of [['hero-display', calcHero, 2], ['villain-display', calcVillain, 2], ['board-display', calcBoard, 5]]) {
+    let el = document.getElementById(id);
+    el.innerHTML = '';
+    for (let i = 0; i < max; i++) {
+      let c = arr[i];
+      if (c) {
+        el.innerHTML += `<div class="card-slot filled ${c.suit}"><span>${c.rank}</span><span>${SUIT_SYMBOLS[c.suit]}</span></div>`;
+      } else {
+        el.innerHTML += `<div class="card-slot">?</div>`;
+      }
+    }
+  }
+}
+
+function updatePickerUsed() {
+  let allUsed = [...calcHero, ...calcVillain, ...calcBoard];
+  document.querySelectorAll('.pick-card').forEach(el => {
+    let r = el.dataset.rank, s = el.dataset.suit;
+    let used = allUsed.some(c => c.rank === r && c.suit === s);
+    let selected = el.classList.contains('selected');
+    el.classList.toggle('used', used && !selected);
+  });
+}
+
+function clearCalc() {
+  calcHero = []; calcVillain = []; calcBoard = [];
+  document.querySelectorAll('.pick-card').forEach(el => { el.classList.remove('selected','used'); });
+  updateCalcDisplay();
+  document.getElementById('calc-results').style.display = 'none';
+}
+
+function runEquityCalc() {
+  if (calcHero.length < 2 || calcVillain.length < 2) {
+    document.getElementById('hero-equity').textContent = 'Выберите карты';
+    document.getElementById('calc-results').style.display = 'block';
+    return;
+  }
+
+  let iterations = 20000;
+  let heroWins = 0, villainWins = 0, ties = 0;
+  let usedCards = [...calcHero, ...calcVillain, ...calcBoard];
+
+  for (let i = 0; i < iterations; i++) {
+    let remaining = makeDeck().filter(c => !usedCards.some(u => u.rank === c.rank && u.suit === c.suit));
+    shuffle(remaining);
+
+    let simBoard = [...calcBoard];
+    while (simBoard.length < 5) simBoard.push(remaining.pop());
+
+    let heroHand = evaluateHand([...calcHero, ...simBoard]);
+    let villainHand = evaluateHand([...calcVillain, ...simBoard]);
+    let cmp = compareHands(heroHand, villainHand);
+    if (cmp > 0) heroWins++;
+    else if (cmp < 0) villainWins++;
+    else ties++;
+  }
+
+  let heroPct = ((heroWins + ties * 0.5) / iterations * 100).toFixed(1);
+  let villainPct = ((villainWins + ties * 0.5) / iterations * 100).toFixed(1);
+
+  document.getElementById('hero-equity').textContent = heroPct + '%';
+  document.getElementById('villain-equity').textContent = villainPct + '%';
+  document.getElementById('hero-bar').style.width = heroPct + '%';
+  document.getElementById('villain-bar').style.width = villainPct + '%';
+  document.getElementById('equity-detail').textContent =
+    `${iterations.toLocaleString()} симуляций | Побед: ${heroWins} | Поражений: ${villainWins} | Сплитов: ${ties}`;
+  document.getElementById('calc-results').style.display = 'block';
+}
+
+/* INIT */
+initCalcPicker();
+resetGame();
+</script>
